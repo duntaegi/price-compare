@@ -60,8 +60,14 @@ h1{font-size:20px;margin:0;font-weight:700}
 .jp{font-weight:400;color:var(--sub);font-size:.82em;margin-left:4px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 12px}
 .chip{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--sub);cursor:pointer;font-family:inherit}
-.store h2{font-size:15px;margin:0}
-.store .meta{font-size:12px;color:var(--mute);margin-top:2px}
+.store{padding:0}
+.shead{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:14px;font-family:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.shead .sname{flex:1;font-size:16px;font-weight:700}
+.shead .scount{font-size:13px;color:var(--sub)}
+.shead .chev{font-size:11px;color:var(--mute)}
+.store .meta,.store .rows{margin-left:14px;margin-right:14px}
+.store .rows{margin-bottom:10px}
+.store .meta{font-size:12px;color:var(--mute);margin-top:-4px;margin-bottom:2px}
 .store a{color:var(--accent);text-decoration:none;font-size:12px}
 .foot{font-size:11px;color:var(--mute);text-align:center;margin-top:18px;line-height:1.6}
 .fav-tag{font-size:11px;color:var(--mute);margin-left:2px}
@@ -86,7 +92,7 @@ h1{font-size:20px;margin:0;font-weight:700}
 </main>
 <script>
 const FAV_KEY='pc.favs.v1';
-let DATA=null, P={}, tab='fav', favs=[];
+let DATA=null, P={}, tab='fav', favs=[], openStores=new Set();
 const $=s=>document.querySelector(s);
 function koOf(key){return (P[key]&&P[key].ko)||key}
 function labelHTML(key){
@@ -199,10 +205,15 @@ function render(){
   }else{
     for(const s of DATA.stores){
       const its=todayItems.filter(it=>it.store===s.id);
-      html+=`<div class="card store"><h2>${esc(s.name)}</h2><div class="meta">${s.note?esc(s.note)+' · ':''}<a href="${s.url}" target="_blank" rel="noopener">찌라시 원본</a></div><div class="rows">`;
-      if(!its.length)html+=`<div class="none">오늘 유효한 데이터가 없어요.</div>`;
-      else for(const it of its.sort((a,b)=>koOf(a.key).localeCompare(koOf(b.key),'ko')))html+=rowHTML({it,p:per(it)},false).replace(/<b>[^<]*<\/b> /,`<b>${esc(koOf(it.key))}</b> `);
-      html+=`</div></div>`;
+      const open=openStores.has(s.id);
+      html+=`<div class="card store"><button class="shead" data-store="${s.id}" aria-expanded="${open}"><span class="sname">${esc(s.name)}</span><span class="scount">${its.length}건</span><span class="chev">${open?'▲':'▼'}</span></button>`;
+      if(open){
+        html+=`<div class="meta">${s.note?esc(s.note)+' · ':''}<a href="${s.url}" target="_blank" rel="noopener">찌라시 원본</a></div><div class="rows">`;
+        if(!its.length)html+=`<div class="none">오늘 유효한 데이터가 없어요.</div>`;
+        else for(const it of its.sort((a,b)=>koOf(a.key).localeCompare(koOf(b.key),'ko')))html+=rowHTML({it,p:per(it)},false).replace(/<b>[^<]*<\/b> /,`<b>${esc(koOf(it.key))}</b> `);
+        html+=`</div>`;
+      }
+      html+=`</div>`;
     }
   }
   v.innerHTML=html;
@@ -235,6 +246,8 @@ document.addEventListener('click',e=>{
   if(tb){tab=tb.dataset.t;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===tb));$('#search').style.display=tab==='fav'?'':'none';$('#sugg').hidden=true;render();return}
   const st=e.target.closest('[data-star]');
   if(st){const k=st.dataset.star;favs=favs.includes(k)?favs.filter(x=>x!==k):[...favs,k];save();render();return}
+  const sh=e.target.closest('[data-store]');
+  if(sh){const id=sh.dataset.store;openStores.has(id)?openStores.delete(id):openStores.add(id);render();return}
   const pk=e.target.closest('[data-pick]');
   if(pk){pick(pk.dataset.pick);return}
   if(!e.target.closest('#search'))$('#sugg').hidden=true;
