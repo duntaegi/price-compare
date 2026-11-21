@@ -83,16 +83,23 @@ h1{font-size:20px;margin:0;font-weight:700}
 .jp{font-weight:400;color:var(--sub);font-size:.82em;margin-left:4px}
 .foot{font-size:11px;color:var(--mute);text-align:center;margin-top:18px;line-height:1.6}
 /* viewer */
-#viewer{position:fixed;inset:0;background:#000;z-index:100;display:none;flex-direction:column}
+#viewer{position:fixed;inset:0;background:#fff;z-index:100;display:none;flex-direction:column;touch-action:manipulation}
 #viewer.on{display:flex}
-.vbar{display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;color:#fff;font-size:13px}
+.vbar{display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;color:#1d2320;font-size:13px;border-bottom:1px solid #e3e6e1}
 .vbar .vt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.vbar button{background:#ffffff22;border:0;color:#fff;font-size:15px;min-width:38px;height:36px;border-radius:10px;font-family:inherit;cursor:pointer}
-#vscroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y pinch-zoom}
-#vscroll img{display:block;width:100%;height:auto;max-width:none}
-.vnav{display:flex;justify-content:space-between;gap:8px;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
-.vnav button{flex:1;background:#ffffff22;border:0;color:#fff;height:40px;border-radius:10px;font-size:14px;font-family:inherit;cursor:pointer}
+.vbar button{background:#0000000f;border:0;color:#1d2320;font-size:15px;min-width:38px;height:36px;border-radius:10px;font-family:inherit;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+#vscroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y pinch-zoom;background:#fff}
+#vscroll img{display:block;width:100%;height:auto;max-width:none;background:#fff}
+.vnav{display:flex;justify-content:space-between;gap:8px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));border-top:1px solid #e3e6e1;background:#fff}
+.vnav button{flex:1;background:#0000000f;border:0;color:#1d2320;height:44px;border-radius:10px;font-size:14px;font-family:inherit;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none}
 .vnav button[disabled]{opacity:.3}
+.fchips{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto}
+.fchip{flex:0 0 auto;font-size:13px;padding:7px 12px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--sub);cursor:pointer;font-family:inherit;white-space:nowrap}
+.fchip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+@media(prefers-color-scheme:dark){.fchip.on{color:#10201a}}
+.fchip .c{opacity:.8;margin-left:3px}
+.fnote{font-size:12px;color:var(--mute);margin:2px 2px 10px;line-height:1.5}
+button,a{touch-action:manipulation}
 </style>
 </head>
 <body>
@@ -103,6 +110,7 @@ h1{font-size:20px;margin:0;font-weight:700}
     <button class="tab on" data-t="store">가게별</button>
     <button class="tab" data-t="fav">즐겨찾기</button>
   </div>
+  <div class="fchips" id="fchips" style="display:none"></div>
   <div class="searchwrap" id="search" style="display:none">
     <input id="addi" type="search" placeholder="품목 검색 (예: 우유, 닭다리살)" autocomplete="off" autocapitalize="off" enterkeyhint="done">
     <div class="sugg" id="sugg" hidden></div>
@@ -195,10 +203,14 @@ function rank(list){
   g.sort((a,b)=>w(a)-w(b)||(a.p&&b.p?a.p.v-b.p.v:(a.it.price||1e9)-(b.it.price||1e9)));
   return g;
 }
-function groupCard(key,list){
+function groupCard(key,list,onlyStore){
   const isFav=favs.includes(key);
   const star=`<button class="star${isFav?' on':''}" data-star="${esc(key)}" aria-label="즐겨찾기">${isFav?'★':'☆'}</button>`;
   if(!list||!list.length)return `<div class="card"><div class="ghead"><div class="gname">${star}<span>${labelHTML(key)}</span></div><span class="fav-tag">오늘 특가 없음</span></div></div>`;
+  if(onlyStore){
+    const rs=rank(list).map(x=>x);
+    return `<div class="card"><div class="ghead"><div class="gname">${star}<span>${labelHTML(key)}</span></div><span class="best nb">${rs.length}건</span></div><div class="rows">${rs.map(x=>rowHTML(x,{})).join('')}</div></div>`;
+  }
   const r=rank(list),top=r[0];
   const cls=x=>x.p?(x.p.count?'n':x.p.label):'x';
   const canCompare=r.filter(x=>cls(x)===cls(top)&&cls(x)!=='x').length>=2;
@@ -206,16 +218,32 @@ function groupCard(key,list){
   const rows=r.map((x,i)=>rowHTML(x,{best:canCompare&&i===0,withStore:true})).join('');
   return `<div class="card"><div class="ghead"><div class="gname">${star}<span>${labelHTML(key)}</span></div><span class="best${canCompare?'':' nb'}">${bestLabel}</span></div><div class="rows">${rows}</div></div>`;
 }
+const FAVSTORE_KEY='pc.favstore.v1';
+const FAV_STORE_ORDER=[['life','라이프'],['gyomu','업무'],['santoku','산토쿠'],['york','요코']];
+let favStore='all';
 function renderFav(){
   const t=todayStr();
-  const g=groups(DATA.items.filter(it=>validOn(it,t)));
+  const today=DATA.items.filter(it=>validOn(it,t));
+  const g=groups(today);
+  const cnt=id=>favs.filter(k=>(g.get(k)||[]).some(it=>it.store===id)).length;
+  $('#fchips').innerHTML=`<button class="fchip${favStore==='all'?' on':''}" data-fs="all">전체</button>`+FAV_STORE_ORDER.map(([id,nm])=>`<button class="fchip${favStore===id?' on':''}" data-fs="${id}">${nm}<span class="c">${cnt(id)}</span></button>`).join('');
   let h='';
   if(!favs.length)h+=`<div class="empty">즐겨찾기가 비어 있어요.<br>위 검색창에서 품목을 찾아 추가해 보세요.</div>`;
-  for(const k of favs)h+=groupCard(k,g.get(k));
+  if(favStore==='all'){
+    for(const k of favs)h+=groupCard(k,g.get(k));
+  }else{
+    const nm=(FAV_STORE_ORDER.find(x=>x[0]===favStore)||[,''])[1];
+    const has=[],none=[];
+    for(const k of favs){const l=(g.get(k)||[]).filter(it=>it.store===favStore);(l.length?has:none).push([k,l])}
+    if(favs.length)h+=`<div class="fnote">${esc(nm)}에서 오늘 즐겨찾기 ${favs.length}개 중 <b>${has.length}개</b>가 특가예요.</div>`;
+    for(const [k,l] of has)h+=groupCard(k,l,true);
+    if(none.length)h+=`<div class="fnote">${esc(nm)}에는 오늘 없어요: ${none.map(([k])=>labelHTML(k)).join(', ')}</div>`;
+  }
   $('#view').innerHTML=h;
 }
 function render(){
   $('#search').style.display=tab==='fav'?'':'none';
+  $('#fchips').style.display=tab==='fav'?'':'none';
   if(tab==='store')renderStore();else renderFav();
 }
 /* ---------- 검색(자동완성) ---------- */
@@ -267,10 +295,18 @@ $('#vprev').onclick=()=>{if(vIdx>0){vIdx--;vZoom=1;showV()}};
 $('#vnext').onclick=()=>{if(vIdx<vList.length-1){vIdx++;vZoom=1;showV()}};
 $('#vimg').addEventListener('dblclick',()=>{vZoom=vZoom>1?1:2.5;applyZoom()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeViewer()});
-/* ---------- 이벤트 ---------- */
+/* iOS: 버튼을 빠르게 두 번 누르면 화면이 확대되는 것 막기 */
+let lastTouchEnd=0;
+document.addEventListener('touchend',e=>{
+  const now=Date.now();
+  if(now-lastTouchEnd<350&&e.target.closest('button')){e.preventDefault();e.target.closest('button').click()}
+  lastTouchEnd=now;
+},{passive:false});/* ---------- 이벤트 ---------- */
 document.addEventListener('click',e=>{
   const tb=e.target.closest('.tab');
   if(tb){tab=tb.dataset.t;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===tb));$('#sugg').hidden=true;render();window.scrollTo(0,0);return}
+  const fs=e.target.closest('[data-fs]');
+  if(fs){favStore=fs.dataset.fs;lsSet(FAVSTORE_KEY,favStore);render();return}
   const sc=e.target.closest('[data-shop]');
   if(sc){curShop=sc.dataset.shop;lsSet(SHOP_KEY,curShop);render();return}
   const lf=e.target.closest('[data-lf]');
@@ -303,6 +339,8 @@ async function init(){
   const saved=lsGet(FAV_KEY);
   if(Array.isArray(saved)){const ks=allKeys();favs=saved.filter(k=>ks.includes(k))}
   else{favs=['卵','鶏もも肉','サーモン'];lsSet(FAV_KEY,favs)}
+  const fsv=lsGet(FAVSTORE_KEY);
+  favStore=(fsv==='all'||FAV_STORE_ORDER.some(x=>x[0]===fsv))?fsv:'all';
   const sh=lsGet(SHOP_KEY);
   curShop=DATA.stores.some(s=>s.id===sh)?sh:DATA.stores[0].id;
   const stale=DATA.updated<t;
