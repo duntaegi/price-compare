@@ -21,6 +21,7 @@ main{max-width:600px;margin:0 auto;padding:14px 14px 0}
 header{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 h1{font-size:20px;margin:0;font-weight:700}
 .date{font-size:14px;color:var(--sub)}
+.ver{font-size:11px;font-weight:500;color:var(--mute);margin-left:4px;vertical-align:2px}
 .sub{font-size:12px;color:var(--mute);margin:3px 0 12px}
 .tabs{display:flex;gap:6px;margin-bottom:12px}
 .tab{flex:1;font-size:15px;padding:9px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--sub);cursor:pointer;font-family:inherit}
@@ -104,7 +105,7 @@ button,a{touch-action:manipulation}
 </head>
 <body>
 <main>
-  <header><h1>오늘의 최저가</h1><span class="date" id="today"></span></header>
+  <header><h1>오늘의 최저가 <span class="ver" id="ver"></span></h1><span class="date" id="today"></span></header>
   <div class="sub" id="sub"></div>
   <div class="tabs" id="tabs">
     <button class="tab on" data-t="store">가게별</button>
@@ -127,6 +128,8 @@ button,a{touch-action:manipulation}
 </div>
 
 <script>
+const APP_VER='v8'; /* sw.js의 VERSION(pricecompare-vN)과 같이 올릴 것 */
+document.getElementById('ver').textContent=APP_VER;
 const FAV_KEY='pc.favs.v1', SHOP_KEY='pc.shop.v1';
 let DATA=null, P={}, tab='store', favs=[], curShop=null;
 const $=s=>document.querySelector(s);
