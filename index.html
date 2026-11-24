@@ -130,7 +130,7 @@ button,a{touch-action:manipulation}
 </div>
 
 <script>
-const APP_VER='v12'; /* sw.js의 VERSION(pricecompare-vN)과 같이 올릴 것 */
+const APP_VER='v13'; /* sw.js의 VERSION(pricecompare-vN)과 같이 올릴 것 */
 document.getElementById('ver').textContent=APP_VER;
 const FAV_KEY='pc.favs.v1', SHOP_KEY='pc.shop.v1';
 let DATA=null, P={}, tab='store', favs=[], curShop=null;
@@ -213,7 +213,8 @@ function renderStore(){
   $('#view').innerHTML=h;
 }
 /* ---------- 즐겨찾기 ---------- */
-function groups(items){const m=new Map();for(const it of items){if(!it.key)continue;if(!m.has(it.key))m.set(it.key,[]);m.get(it.key).push(it)}return m}
+function keysOf(it){return [it.key,...(it.alt||[])].filter(Boolean)}
+function groups(items){const m=new Map();for(const it of items){for(const k of keysOf(it)){if(!m.has(k))m.set(k,[]);m.get(k).push(it)}}return m}
 function rank(list){
   const g=list.map(it=>({it,p:per(it)}));
   const w=x=>!x.p?2:(x.p.count?1:0);
@@ -266,8 +267,8 @@ function render(){
   if(tab==='store')renderStore();else renderFav();
 }
 /* ---------- 검색(자동완성) ---------- */
-function allKeys(){const set=new Set(Object.keys(P));for(const it of DATA.items)if(it.key)set.add(it.key);return [...set]}
-function dealCount(key,t){return DATA.items.filter(it=>it.key===key&&inWeek(it,t)).length}
+function allKeys(){const set=new Set(Object.keys(P));for(const it of DATA.items)for(const k of keysOf(it))set.add(k);return [...set]}
+function dealCount(key,t){return DATA.items.filter(it=>keysOf(it).includes(key)&&inWeek(it,t)).length}
 function suggest(q){
   const nq=norm(q);if(!nq)return [];
   const t=todayStr(),out=[];
