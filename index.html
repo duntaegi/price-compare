@@ -82,6 +82,8 @@ h1{font-size:20px;margin:0;font-weight:700}
 .sugg .noresult{padding:12px 14px;font-size:13px;color:var(--mute)}
 .ko{font-weight:700}
 .jp{font-weight:400;color:var(--sub);font-size:.82em;margin-left:4px}
+.week-box{background:var(--greenbg);color:var(--green);border-radius:10px;padding:9px 12px;font-size:13px;margin:12px 0 4px;line-height:1.5}
+.week-box b{font-weight:700}
 .foot{font-size:11px;color:var(--mute);text-align:center;margin-top:18px;line-height:1.6}
 /* viewer */
 #viewer{position:fixed;inset:0;background:#fff;z-index:100;display:none;flex-direction:column;touch-action:manipulation}
@@ -128,7 +130,7 @@ button,a{touch-action:manipulation}
 </div>
 
 <script>
-const APP_VER='v11'; /* sw.js의 VERSION(pricecompare-vN)과 같이 올릴 것 */
+const APP_VER='v12'; /* sw.js의 VERSION(pricecompare-vN)과 같이 올릴 것 */
 document.getElementById('ver').textContent=APP_VER;
 const FAV_KEY='pc.favs.v1', SHOP_KEY='pc.shop.v1';
 let DATA=null, P={}, tab='store', favs=[], curShop=null;
@@ -154,6 +156,11 @@ function per(it){
   return null;
 }
 function validOn(it,t){return it.from<=t&&t<=it.to}
+function addDays(s,n){const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);const p=x=>String(x).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
+/* 이번 주 = 오늘부터 이번 주 일요일까지 (일요일이면 다음 주 일요일까지) */
+function weekEnd(t){const w=new Date(t+'T00:00:00').getDay();return addDays(t,w===0?7:7-w)}
+function inWeek(it,t){return it.from<=weekEnd(t)&&it.to>=t}
+function weekLabel(t){const e=weekEnd(t);return `${md(t)}(${dow(t)}) ~ ${md(e)}(${dow(e)})`}
 function periodLabel(it){
   if(it.from===it.to)return md(it.from)+'('+dow(it.from)+')만';
   return md(it.from)+'~'+md(it.to);
@@ -177,13 +184,15 @@ function renderStore(){
   const t=todayStr();
   const chips=DATA.stores.map(s=>{
     const n=DATA.items.filter(it=>it.store===s.id).length;
-    const nt=DATA.items.filter(it=>it.store===s.id&&validOn(it,t)).length;
-    return `<button class="schip${s.id===curShop?' on':''}" data-shop="${s.id}"><span class="n">${esc(s.name)}</span><span class="c">전체 ${n}건 · 오늘 ${nt}건</span></button>`;
+    const nt=DATA.items.filter(it=>it.store===s.id&&inWeek(it,t)).length;
+    return `<button class="schip${s.id===curShop?' on':''}" data-shop="${s.id}"><span class="n">${esc(s.name)}</span><span class="c">전체 ${n}건 · 이번 주 ${nt}건</span></button>`;
   }).join('');
   const s=storeOf(curShop);
   const all=DATA.items.filter(it=>it.store===s.id);
+  const we=weekEnd(t);
   const today=all.filter(it=>validOn(it,t));
-  const future=all.filter(it=>it.from>t);
+  const later=all.filter(it=>it.from>t&&it.from<=we);
+  const future=all.filter(it=>it.from>we);
   const past=all.filter(it=>it.to<t);
   const lf=s.leaflets.map((l,i)=>`<button class="lf" data-lf="${i}"><img loading="lazy" src="${esc(l.img)}" alt="${esc(l.title)}"><div class="t"><b>${esc(l.title)}</b><span>${esc(l.period)}</span></div></button>`).join('');
   const byDate=(a,b)=>a.from.localeCompare(b.from)||a.to.localeCompare(b.to);
@@ -193,8 +202,13 @@ function renderStore(){
   h+=`<div class="shop-head"><h2>${esc(s.name)}</h2><div class="meta">${esc(s.src)} · <a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--accent)">원본 사이트</a></div></div>`;
   h+=`<div class="sec-title">찌라시 (${s.leaflets.length}장) — 탭하면 크게 볼 수 있어요</div><div class="leaflets">${lf}</div>`;
   h+=`<div class="sec-title">찌라시에 적힌 상품 전체 (${all.length}건)</div>`;
-  if(today.length)h+=`<div class="group-title">오늘 (${md(t)}) 유효<span>${today.length}건</span></div><div class="rows">${list(sortBy(today),{today:true})}</div>`;
-  if(future.length)h+=`<div class="group-title">앞으로 시작<span>${future.length}건</span></div><div class="rows">${list(sortBy(future))}</div>`;
+  const inW=today.length+later.length;
+  h+=`<div class="week-box">이번 주 특가 <b>${weekLabel(t)}</b> · ${inW}건</div>`;
+  if(today.length)h+=`<div class="group-title">오늘부터 (${md(t)} ${dow(t)}) 진행 중<span>${today.length}건</span></div><div class="rows">${list(sortBy(today),{today:true})}</div>`;
+  const days=[...new Set(later.map(it=>it.from))].sort();
+  for(const d of days){const arr=later.filter(it=>it.from===d);h+=`<div class="group-title">${md(d)} (${dow(d)}) 시작<span>${arr.length}건</span></div><div class="rows">${list(sortBy(arr))}</div>`}
+  if(!inW)h+=`<div class="empty">이번 주에 유효한 상품이 없어요. 새 찌라시가 올라오면 업데이트해요.</div>`;
+  if(future.length)h+=`<div class="group-title">다음 주 이후 시작<span>${future.length}건</span></div><div class="rows">${list(sortBy(future))}</div>`;
   if(past.length)h+=`<div class="group-title">이미 끝남<span>${past.length}건</span></div><div class="rows">${list(sortBy(past),{past:true})}</div>`;
   $('#view').innerHTML=h;
 }
@@ -209,16 +223,17 @@ function rank(list){
 function groupCard(key,list,onlyStore){
   const isFav=favs.includes(key);
   const star=`<button class="star${isFav?' on':''}" data-star="${esc(key)}" aria-label="즐겨찾기">${isFav?'★':'☆'}</button>`;
-  if(!list||!list.length)return `<div class="card"><div class="ghead"><div class="gname">${star}<span>${labelHTML(key)}</span></div><span class="fav-tag">오늘 특가 없음</span></div></div>`;
+  if(!list||!list.length)return `<div class="card"><div class="ghead"><div class="gname">${star}<span>${labelHTML(key)}</span></div><span class="fav-tag">이번 주 특가 없음</span></div></div>`;
+  const ptag=it=>`<span class="tag${validOn(it,todayStr())?' today':''}">${periodLabel(it)}</span>`;
   if(onlyStore){
     const rs=rank(list).map(x=>x);
-    return `<div class="card"><div class="ghead"><div class="gname">${star}<span>${labelHTML(key)}</span></div><span class="best nb">${rs.length}건</span></div><div class="rows">${rs.map(x=>rowHTML(x,{})).join('')}</div></div>`;
+    return `<div class="card"><div class="ghead"><div class="gname">${star}<span>${labelHTML(key)}</span></div><span class="best nb">${rs.length}건</span></div><div class="rows">${rs.map(x=>rowHTML(x,{tag:ptag(x.it)})).join('')}</div></div>`;
   }
   const r=rank(list),top=r[0];
   const cls=x=>x.p?(x.p.count?'n':x.p.label):'x';
   const canCompare=r.filter(x=>cls(x)===cls(top)&&cls(x)!=='x').length>=2;
   const bestLabel=canCompare?`최저 ${storeOf(top.it.store).short}`:(new Set(r.map(x=>x.it.store)).size===1?`${storeOf(top.it.store).short}만 특가`:'직접 비교 불가');
-  const rows=r.map((x,i)=>rowHTML(x,{best:canCompare&&i===0,withStore:true})).join('');
+  const rows=r.map((x,i)=>rowHTML(x,{best:canCompare&&i===0,withStore:true,tag:ptag(x.it)})).join('');
   return `<div class="card"><div class="ghead"><div class="gname">${star}<span>${labelHTML(key)}</span></div><span class="best${canCompare?'':' nb'}">${bestLabel}</span></div><div class="rows">${rows}</div></div>`;
 }
 const FAVSTORE_KEY='pc.favstore.v1';
@@ -226,7 +241,7 @@ const FAV_STORE_ORDER=[['life','라이프'],['gyomu','업무'],['santoku','산�
 let favStore='all';
 function renderFav(){
   const t=todayStr();
-  const today=DATA.items.filter(it=>validOn(it,t));
+  const today=DATA.items.filter(it=>inWeek(it,t));
   const g=groups(today);
   const cnt=id=>favs.filter(k=>(g.get(k)||[]).some(it=>it.store===id)).length;
   $('#fchips').innerHTML=`<button class="fchip${favStore==='all'?' on':''}" data-fs="all">전체</button>`+FAV_STORE_ORDER.map(([id,nm])=>`<button class="fchip${favStore===id?' on':''}" data-fs="${id}">${nm}<span class="c">${cnt(id)}</span></button>`).join('');
@@ -238,10 +253,11 @@ function renderFav(){
     const nm=(FAV_STORE_ORDER.find(x=>x[0]===favStore)||[,''])[1];
     const has=[],none=[];
     for(const k of favs){const l=(g.get(k)||[]).filter(it=>it.store===favStore);(l.length?has:none).push([k,l])}
-    if(favs.length)h+=`<div class="fnote">${esc(nm)}에서 오늘 즐겨찾기 ${favs.length}개 중 <b>${has.length}개</b>가 특가예요.</div>`;
+    if(favs.length)h+=`<div class="fnote">${esc(nm)}에서 이번 주 즐겨찾기 ${favs.length}개 중 <b>${has.length}개</b>가 특가예요.</div>`;
     for(const [k,l] of has)h+=groupCard(k,l,true);
-    if(none.length)h+=`<div class="fnote">${esc(nm)}에는 오늘 없어요: ${none.map(([k])=>labelHTML(k)).join(', ')}</div>`;
+    if(none.length)h+=`<div class="fnote">${esc(nm)}에는 이번 주 없어요: ${none.map(([k])=>labelHTML(k)).join(', ')}</div>`;
   }
+  if(favs.length)h=`<div class="week-box">이번 주 특가 <b>${weekLabel(t)}</b> 기준</div>`+h;
   $('#view').innerHTML=h;
 }
 function render(){
@@ -251,7 +267,7 @@ function render(){
 }
 /* ---------- 검색(자동완성) ---------- */
 function allKeys(){const set=new Set(Object.keys(P));for(const it of DATA.items)if(it.key)set.add(it.key);return [...set]}
-function dealCount(key,t){return DATA.items.filter(it=>it.key===key&&validOn(it,t)).length}
+function dealCount(key,t){return DATA.items.filter(it=>it.key===key&&inWeek(it,t)).length}
 function suggest(q){
   const nq=norm(q);if(!nq)return [];
   const t=todayStr(),out=[];
@@ -272,7 +288,7 @@ function showSugg(){
   if(!q.trim()){box.hidden=true;curSugg=[];return}
   curSugg=suggest(q);hlIdx=-1;
   if(!curSugg.length){box.innerHTML='<div class="noresult">찾는 품목이 없어요. 다른 말로 검색해 보세요.</div>';box.hidden=false;return}
-  box.innerHTML=curSugg.map(s=>`<button type="button" data-pick="${esc(s.key)}"><span>${labelHTML(s.key)}</span>${s.deal?`<span class="deal">오늘 ${s.deal}건 특가</span>`:'<span class="nodeal">오늘 특가 없음</span>'}</button>`).join('');
+  box.innerHTML=curSugg.map(s=>`<button type="button" data-pick="${esc(s.key)}"><span>${labelHTML(s.key)}</span>${s.deal?`<span class="deal">이번 주 ${s.deal}건 특가</span>`:'<span class="nodeal">이번 주 특가 없음</span>'}</button>`).join('');
   box.hidden=false;
 }
 function pick(key){
